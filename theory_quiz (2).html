@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACC402 — Theory Quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- ============================================================
+     FIREBASE SETUP — fill this in before going live.
+     1. Create/reuse a Firebase project → console.firebase.google.com
+     2. Enable "Firestore Database" (start in production mode)
+     3. Enable "Authentication" → Sign-in method → Email/Password
+     4. Authentication → Users → add yourself as the one admin account
+     5. Paste your project's config object below (Project settings → General → SDK setup)
+     6. In Firestore → Rules, paste the rules from the note at the
+        end of this file (students can submit but not read others' answers;
+        only the logged-in admin can read/manage everything).
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --navy:#16233f;
+    --navy-deep:#0d1730;
+    --paper:#faf6ec;
+    --paper-line:#e3d9bf;
+    --gold:#ad8a35;
+    --gold-bright:#c9a227;
+    --ink:#20242c;
+    --slate:#5c6474;
+    --danger:#a3402c;
+    --success:#3c6b4a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(201,162,39,0.10), transparent 45%),
+      var(--navy-deep);
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    padding:32px 16px;
+  }
+  .stage{max-width:960px; margin:0 auto;}
+  .brand{
+    display:flex; align-items:baseline; justify-content:space-between;
+    color:#eae3ce; margin-bottom:22px; flex-wrap:wrap; gap:8px;
+  }
+  .brand .mark{font-family:'Fraunces',serif; font-size:22px; font-weight:700;}
+  .brand .mark span{color:var(--gold-bright);}
+  .brand .tag{font-family:'IBM Plex Mono',monospace; font-size:12px; color:#b7bfd1; letter-spacing:0.5px;}
+  .brand a.adminlink{color:#7d869c; font-size:11px; text-decoration:none; font-family:'IBM Plex Mono',monospace;}
+  .brand a.adminlink:hover{color:#b7bfd1;}
+
+  .panel{background:var(--paper); border-radius:4px; box-shadow:0 20px 50px rgba(0,0,0,0.35); overflow:hidden;}
+
+  /* ---------- ENTRY VIEW ---------- */
+  .entry-grid{display:grid; grid-template-columns:1.15fr 0.85fr;}
+  @media (max-width:760px){.entry-grid{grid-template-columns:1fr;}}
+  .entry-form{padding:40px 40px 36px;}
+  .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gold); margin:0 0 10px;}
+  h1.title{font-family:'Fraunces',serif; font-size:28px; font-weight:600; margin:0 0 6px; color:var(--navy); line-height:1.2;}
+  .sub{color:var(--slate); font-size:14.5px; margin:0 0 28px; max-width:48ch;}
+  label{display:block; font-size:12.5px; font-weight:600; color:var(--navy); margin-bottom:6px;}
+  .field{margin-bottom:18px;}
+  input[type=text], input[type=email], input[type=password], input[type=date], input[type=number]{
+    width:100%; padding:11px 13px; border:1.5px solid var(--paper-line); background:#fff;
+    border-radius:3px; font-family:'Inter',sans-serif; font-size:14.5px; color:var(--ink); outline:none;
+  }
+  input:focus, textarea:focus{border-color:var(--gold-bright);}
+  input::placeholder{color:#b3b1a4;}
+
+  .loc-box{margin-top:6px; border:1.5px dashed var(--paper-line); border-radius:4px; padding:16px; background:#fffdf8;}
+  .loc-row{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .loc-status{font-size:13.5px; color:var(--slate);}
+  .loc-status.ok{color:var(--success); font-weight:600;}
+  .loc-status.err{color:var(--danger); font-weight:600;}
+  .loc-coords{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--navy); margin-top:8px;}
+  button{font-family:'Inter',sans-serif; cursor:pointer; border:none;}
+  .btn-loc{background:var(--navy); color:#f4efe0; padding:9px 16px; border-radius:3px; font-size:13px; font-weight:600; white-space:nowrap;}
+  .btn-loc:hover{background:var(--navy-deep);}
+  .btn-loc:disabled{opacity:0.55; cursor:not-allowed;}
+  .btn-start{width:100%; margin-top:26px; padding:14px; background:var(--gold-bright); color:var(--navy-deep); font-weight:700; font-size:14.5px; border-radius:3px;}
+  .btn-start:disabled{background:#d8d2bd; color:#8c8873; cursor:not-allowed;}
+  .hint{font-size:12px; color:var(--slate); margin-top:10px;}
+  .hint.err{color:var(--danger);}
+
+  .slip{background:var(--navy); background-image:radial-gradient(circle at 100% 0%, rgba(201,162,39,0.18), transparent 55%); color:#eae3ce; padding:36px 30px; position:relative; display:flex; flex-direction:column; justify-content:space-between;}
+  .slip::before{content:""; position:absolute; left:0; top:0; bottom:0; border-left:2px dashed rgba(234,227,206,0.25);}
+  .slip-top .eyebrow{color:var(--gold-bright);}
+  .slip-title{font-family:'Fraunces',serif; font-size:19px; font-weight:600; margin:0 0 22px; color:#fff;}
+  .slip-line{margin-bottom:16px;}
+  .slip-line .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:#98a1b8; display:block; margin-bottom:3px;}
+  .slip-line .v{font-size:15px; font-weight:600; color:#f5f1e2; min-height:19px;}
+  .slip-line .v.placeholder{color:#5b6480; font-weight:400; font-style:italic;}
+  .slip-stamp{margin-top:22px; padding-top:16px; border-top:1px solid rgba(234,227,206,0.18); display:flex; align-items:center; gap:10px;}
+  .stamp-dot{width:10px; height:10px; border-radius:50%; background:#7a8296; flex-shrink:0;}
+  .stamp-dot.on{background:var(--success); box-shadow:0 0 0 3px rgba(60,107,74,0.25);}
+  .stamp-text{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#b7bfd1;}
+
+  /* ---------- QUIZ VIEW ---------- */
+  .quiz-header{background:var(--navy); color:#eae3ce; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;}
+  .quiz-header .who{font-family:'IBM Plex Mono',monospace; font-size:12px; color:#b7bfd1;}
+  .quiz-header .who b{color:#f5f1e2;}
+  .quiz-header h2{font-family:'Fraunces',serif; font-size:19px; margin:0;}
+  .timer{font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600; color:#f5f1e2; background:rgba(255,255,255,0.08); padding:8px 16px; border-radius:4px; letter-spacing:1px;}
+  .timer.warn{color:#f0c419;}
+  .timer.crit{color:#e8836b;}
+  .quiz-body{padding:36px 40px 40px;}
+  .q-block{margin-bottom:30px; padding-bottom:28px; border-bottom:1px solid var(--paper-line);}
+  .q-block:last-of-type{border-bottom:none;}
+  .q-label{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--gold); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px;}
+  .q-text{font-family:'Fraunces',serif; font-size:16.5px; font-weight:500; color:var(--navy); line-height:1.55; margin:0 0 14px; white-space:pre-wrap;}
+  textarea{width:100%; min-height:170px; padding:14px; border:1.5px solid var(--paper-line); border-radius:3px; font-family:'Inter',sans-serif; font-size:14.5px; line-height:1.55; color:var(--ink); resize:vertical; outline:none;}
+  .wc{text-align:right; font-size:11.5px; color:var(--slate); margin-top:6px; font-family:'IBM Plex Mono',monospace;}
+  .btn-submit{width:100%; padding:15px; background:var(--gold-bright); color:var(--navy-deep); font-weight:700; font-size:14.5px; border-radius:3px;}
+  .btn-submit:disabled{background:#d8d2bd; color:#8c8873; cursor:not-allowed;}
+
+  /* ---------- DONE VIEW ---------- */
+  .done{padding:60px 40px; text-align:center;}
+  .done .check{width:56px; height:56px; border-radius:50%; background:var(--success); color:#fff; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:26px;}
+  .done h2{font-family:'Fraunces',serif; color:var(--navy); margin:0 0 8px;}
+  .done p{color:var(--slate); margin:0 0 10px;}
+  .done .warn-note{color:var(--danger); font-size:13px;}
+  .btn-again{background:var(--navy); color:#f4efe0; padding:12px 22px; border-radius:3px; font-weight:600; font-size:13.5px; margin-top:16px;}
+
+  /* ---------- ADMIN VIEW ---------- */
+  .admin-header{background:var(--navy); color:#eae3ce; padding:20px 40px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  .admin-header h2{font-family:'Fraunces',serif; margin:0; font-size:19px;}
+  .btn-ghost{background:transparent; border:1px solid rgba(234,227,206,0.4); color:#eae3ce; padding:8px 14px; border-radius:3px; font-size:12.5px;}
+  .admin-body{padding:32px 40px 44px;}
+  .admin-section{margin-bottom:34px;}
+  .admin-section h3{font-family:'Fraunces',serif; color:var(--navy); font-size:16px; margin:0 0 14px; border-bottom:1px solid var(--paper-line); padding-bottom:10px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media (max-width:640px){.grid2{grid-template-columns:1fr;}}
+  .btn-save{background:var(--gold-bright); color:var(--navy-deep); padding:11px 20px; border-radius:3px; font-weight:700; font-size:13.5px;}
+  .save-msg{font-size:12.5px; color:var(--success); margin-left:12px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--slate); border-bottom:1.5px solid var(--paper-line); padding:8px 10px;}
+  td{padding:10px; border-bottom:1px solid var(--paper-line); vertical-align:top;}
+  td a{color:var(--navy); text-decoration:underline;}
+  .btn-view{background:var(--navy); color:#f4efe0; padding:6px 10px; border-radius:3px; font-size:11.5px;}
+  .ans-detail{display:none; background:#fffdf8; border:1px dashed var(--paper-line); padding:12px; margin-top:6px; border-radius:3px; white-space:pre-wrap; font-size:13px;}
+  .ans-detail.open{display:block;}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;}
+  .btn-export{background:var(--navy); color:#f4efe0; padding:9px 16px; border-radius:3px; font-size:12.5px; font-weight:600;}
+  .login-wrap{padding:60px 40px; max-width:380px; margin:0 auto;}
+  .err-msg{color:var(--danger); font-size:13px; margin-top:10px;}
+  .empty-note{color:var(--slate); font-size:13.5px; padding:14px 0;}
+
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="brand">
+    <div class="mark">Exam<span>Portal</span></div>
+    <a href="#admin" class="adminlink" id="adminNavLink">admin</a>
+  </div>
+
+  <!-- ENTRY VIEW -->
+  <div class="panel" id="entryView">
+    <div class="entry-grid">
+      <div class="entry-form">
+        <p class="eyebrow" id="entryEyebrow">Quiz date · Lecturer</p>
+        <h1 class="title" id="entryTitle">Advanced Financial Accounting VI (ACC402)</h1>
+        <p class="sub">Enter your details and share your location to unlock the paper. You will have <span id="durationInline">15</span> minutes once you start.</p>
+
+        <div class="field">
+          <label for="fName">Full name</label>
+          <input type="text" id="fName" placeholder="e.g. Chidinma Okafor">
+        </div>
+        <div class="field">
+          <label for="fReg">Registration number</label>
+          <input type="text" id="fReg" placeholder="e.g. UNN/2023/104582">
+        </div>
+        <div class="field">
+          <label for="fSerial">Serial number</label>
+          <input type="text" id="fSerial" placeholder="e.g. SN-0047">
+        </div>
+
+        <div class="field">
+          <label>Location verification</label>
+          <div class="loc-box">
+            <div class="loc-row">
+              <span class="loc-status" id="locStatus">Location not yet shared</span>
+              <button class="btn-loc" id="locBtn">Share my location</button>
+            </div>
+            <div class="loc-coords hidden" id="locCoords"></div>
+          </div>
+        </div>
+
+        <button class="btn-start" id="startBtn" disabled>Start quiz</button>
+        <p class="hint" id="startHint">Fill in all three fields and share your location to continue.</p>
+      </div>
+
+      <div class="slip">
+        <div>
+          <div class="slip-top">
+            <p class="eyebrow">Admission slip</p>
+            <h3 class="slip-title">Candidate Record</h3>
+          </div>
+          <div class="slip-line"><span class="k">Name</span><span class="v placeholder" id="slipName">Not entered</span></div>
+          <div class="slip-line"><span class="k">Reg. number</span><span class="v placeholder" id="slipReg">Not entered</span></div>
+          <div class="slip-line"><span class="k">Serial number</span><span class="v placeholder" id="slipSerial">Not entered</span></div>
+        </div>
+        <div class="slip-stamp">
+          <span class="stamp-dot" id="slipDot"></span>
+          <span class="stamp-text" id="slipStampText">Location unverified</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIZ VIEW -->
+  <div class="panel hidden" id="quizView">
+    <div class="quiz-header">
+      <div>
+        <h2>Theory Paper</h2>
+        <div class="who">Candidate: <b id="quizWho">—</b></div>
+      </div>
+      <div class="timer" id="timerDisplay">15:00</div>
+    </div>
+    <div class="quiz-body">
+      <div class="q-block">
+        <p class="q-label">Question 1</p>
+        <p class="q-text" id="q1Text"></p>
+        <textarea id="ans1" placeholder="Write your answer here..."></textarea>
+        <div class="wc" id="wc1">0 words</div>
+      </div>
+      <div class="q-block">
+        <p class="q-label">Question 2</p>
+        <p class="q-text" id="q2Text"></p>
+        <textarea id="ans2" placeholder="Write your answer here..."></textarea>
+        <div class="wc" id="wc2">0 words</div>
+      </div>
+      <button class="btn-submit" id="submitBtn" disabled>Submit answers</button>
+      <p class="hint" id="submitHint">Answer both questions to enable submission.</p>
+    </div>
+  </div>
+
+  <!-- DONE VIEW -->
+  <div class="panel hidden" id="doneView">
+    <div class="done">
+      <div class="check">✓</div>
+      <h2 id="doneHeading">Answers submitted</h2>
+      <p>A PDF copy of your paper has downloaded to this device. It has also been recorded for your lecturer.</p>
+      <p class="warn-note hidden" id="cloudWarn">Your PDF saved, but we could not confirm the online record — please also share the downloaded PDF with your lecturer directly.</p>
+      <button class="btn-again" id="downloadAgainBtn">Download PDF again</button>
+    </div>
+  </div>
+
+  <!-- ADMIN: LOGIN -->
+  <div class="panel hidden" id="adminLoginView">
+    <div class="login-wrap">
+      <p class="eyebrow">Admin</p>
+      <h1 class="title" style="font-size:22px;">Sign in</h1>
+      <p class="sub">Manage the quiz and review student submissions.</p>
+      <div class="field"><label for="admEmail">Email</label><input type="email" id="admEmail" placeholder="lecturer@example.com"></div>
+      <div class="field"><label for="admPass">Password</label><input type="password" id="admPass" placeholder="••••••••"></div>
+      <button class="btn-start" id="admLoginBtn">Sign in</button>
+      <p class="err-msg hidden" id="admLoginErr"></p>
+      <p class="hint">Admin accounts are created in the Firebase console, not on this page.</p>
+    </div>
+  </div>
+
+  <!-- ADMIN: DASHBOARD -->
+  <div class="panel hidden" id="adminDashView">
+    <div class="admin-header">
+      <h2>Quiz administration</h2>
+      <button class="btn-ghost" id="admLogoutBtn">Sign out</button>
+    </div>
+    <div class="admin-body">
+      <div class="admin-section">
+        <h3>Quiz settings</h3>
+        <div class="grid2">
+          <div class="field"><label>Course code</label><input type="text" id="cfgCode"></div>
+          <div class="field"><label>Course title</label><input type="text" id="cfgTitle"></div>
+          <div class="field"><label>Quiz date</label><input type="date" id="cfgDate"></div>
+          <div class="field"><label>Lecturer</label><input type="text" id="cfgLecturer"></div>
+          <div class="field"><label>Duration (minutes)</label><input type="number" id="cfgDuration" min="1" max="240"></div>
+        </div>
+        <div class="field"><label>Question 1</label><textarea id="cfgQ1" style="min-height:120px;"></textarea></div>
+        <div class="field"><label>Question 2</label><textarea id="cfgQ2" style="min-height:80px;"></textarea></div>
+        <button class="btn-save" id="cfgSaveBtn">Save settings</button>
+        <span class="save-msg hidden" id="cfgSaveMsg">Saved</span>
+      </div>
+
+      <div class="admin-section">
+        <div class="toolbar">
+          <h3 style="margin:0; border:none; padding:0;">Submissions</h3>
+          <button class="btn-export" id="exportCsvBtn">Export CSV</button>
+        </div>
+        <table id="subsTable">
+          <thead>
+            <tr><th>Name</th><th>Reg. no.</th><th>Serial</th><th>Submitted</th><th>Location</th><th></th></tr>
+          </thead>
+          <tbody id="subsBody"></tbody>
+        </table>
+        <p class="empty-note hidden" id="subsEmpty">No submissions yet.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ FILL IN YOUR FIREBASE PROJECT CONFIG HERE ============ */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const CONFIG_DOC = db.collection('config').doc('quizConfig');
+const SUBMISSIONS = db.collection('submissions');
+
+/* Fallback defaults shown until the config doc loads (or if it's unreachable) */
+const DEFAULT_CONFIG = {
+  courseCode: 'ACC402',
+  courseTitle: 'Advanced Financial Accounting VI',
+  quizDate: '2026-07-28',
+  lecturer: 'Dr. Kemdi Lugard Okoroiwu',
+  durationMinutes: 15,
+  question1: `Bekee Plc is preparing its financial statements for the year ended 31 December 2025. During the year, the company acquired a production machine, incurred expenditure on research and the development of a software application, identified indicators that a production asset and its related cash-generating unit may have suffered impairment, and experienced two significant events after the reporting date: the bankruptcy of a major customer and a fire that destroyed one of its insured warehouses before the financial statements were authorised for issue.
+
+Required: As the financial accountant of Bekee Plc, prepare a report to the Board of Directors explaining the appropriate accounting treatment of each of the above transactions and events, clearly justifying your recommendations and discussing their impact on the financial statements for the year ended 31 December 2025. Support your discussion with reference to the relevant accounting principles.`,
+  question2: `Define: i. Recoverable value  ii. Cash-Generating Unit  iii. How impairment is determined.`
+};
+
+let cfg = { ...DEFAULT_CONFIG };
+
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' });
+}
+
+function applyConfigToStudentView(){
+  document.getElementById('entryEyebrow').textContent = `${fmtDate(cfg.quizDate)} · ${cfg.lecturer}`;
+  document.getElementById('entryTitle').textContent = `${cfg.courseTitle} (${cfg.courseCode})`;
+  document.getElementById('durationInline').textContent = cfg.durationMinutes;
+  document.getElementById('q1Text').textContent = cfg.question1;
+  document.getElementById('q2Text').textContent = cfg.question2;
+}
+
+async function loadConfig(){
+  try{
+    const snap = await CONFIG_DOC.get();
+    if(snap.exists){ cfg = { ...DEFAULT_CONFIG, ...snap.data() }; }
+  }catch(e){ /* offline or not yet configured — fall back to defaults silently */ }
+  applyConfigToStudentView();
+}
+
+/* ============================================================
+   ROUTER — student view by default, #admin for the dashboard
+   ============================================================ */
+const views = ['entryView','quizView','doneView','adminLoginView','adminDashView'];
+function showView(id){
+  views.forEach(v => document.getElementById(v).classList.toggle('hidden', v !== id));
+}
+
+function isAdminRoute(){ return location.hash === '#admin'; }
+
+function routeApp(){
+  if(isAdminRoute()){
+    if(auth.currentUser){ showAdminDash(); } else { showView('adminLoginView'); }
+  } else {
+    showView('entryView');
+  }
+}
+window.addEventListener('hashchange', routeApp);
+
+/* ============================================================
+   STUDENT FLOW
+   ============================================================ */
+const state = { name:'', reg:'', serial:'', location:null, startedAt:null, submitted:false };
+
+const fName = document.getElementById('fName');
+const fReg = document.getElementById('fReg');
+const fSerial = document.getElementById('fSerial');
+const slipName = document.getElementById('slipName');
+const slipReg = document.getElementById('slipReg');
+const slipSerial = document.getElementById('slipSerial');
+const startBtn = document.getElementById('startBtn');
+const startHint = document.getElementById('startHint');
+const locBtn = document.getElementById('locBtn');
+const locStatus = document.getElementById('locStatus');
+const locCoords = document.getElementById('locCoords');
+const slipDot = document.getElementById('slipDot');
+const slipStampText = document.getElementById('slipStampText');
+
+function updateSlip(){
+  slipName.textContent = fName.value.trim() || 'Not entered';
+  slipName.classList.toggle('placeholder', !fName.value.trim());
+  slipReg.textContent = fReg.value.trim() || 'Not entered';
+  slipReg.classList.toggle('placeholder', !fReg.value.trim());
+  slipSerial.textContent = fSerial.value.trim() || 'Not entered';
+  slipSerial.classList.toggle('placeholder', !fSerial.value.trim());
+  validateEntry();
+}
+[fName, fReg, fSerial].forEach(el => el.addEventListener('input', updateSlip));
+
+function validateEntry(){
+  const filled = fName.value.trim() && fReg.value.trim() && fSerial.value.trim();
+  const ok = filled && state.location;
+  startBtn.disabled = !ok;
+  if(!filled){ startHint.textContent = 'Fill in all three fields and share your location to continue.'; }
+  else if(!state.location){ startHint.textContent = 'Almost there — share your location to unlock the quiz.'; }
+  else { startHint.textContent = 'You are all set. Good luck!'; }
+}
+
+async function reverseGeocode(lat, lon){
+  try{
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`, {
+      headers: { 'Accept-Language': 'en' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data && data.display_name ? data.display_name : null;
+  }catch(e){ return null; }
+}
+
+locBtn.addEventListener('click', () => {
+  if(!('geolocation' in navigator)){
+    locStatus.textContent = 'Geolocation is not supported on this device';
+    locStatus.className = 'loc-status err';
+    return;
+  }
+  locBtn.disabled = true;
+  locBtn.textContent = 'Requesting…';
+  locStatus.textContent = 'Waiting for permission…';
+  locStatus.className = 'loc-status';
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      state.location = {
+        lat: pos.coords.latitude, lon: pos.coords.longitude,
+        accuracy: pos.coords.accuracy, capturedAt: new Date().toISOString(),
+        address: null
+      };
+      locStatus.textContent = 'Location verified — looking up address…';
+      locStatus.className = 'loc-status ok';
+      locCoords.textContent = `${state.location.lat.toFixed(5)}, ${state.location.lon.toFixed(5)} (±${Math.round(state.location.accuracy)}m)`;
+      locCoords.classList.remove('hidden');
+      locBtn.textContent = 'Location shared';
+      slipDot.classList.add('on');
+      slipStampText.textContent = 'Location verified';
+      validateEntry();
+
+      state.location.address = await reverseGeocode(state.location.lat, state.location.lon);
+      if(state.location.address){
+        locStatus.textContent = 'Location verified';
+        locCoords.textContent = `${state.location.address}`;
+        slipStampText.textContent = state.location.address;
+      } else {
+        locStatus.textContent = 'Location verified';
+      }
+    },
+    () => {
+      locStatus.textContent = 'Location access denied or unavailable — please allow location and try again';
+      locStatus.className = 'loc-status err';
+      locBtn.disabled = false;
+      locBtn.textContent = 'Share my location';
+      validateEntry();
+    },
+    { enableHighAccuracy:true, timeout:12000 }
+  );
+});
+
+const quizWho = document.getElementById('quizWho');
+const q1Text = document.getElementById('q1Text');
+const q2Text = document.getElementById('q2Text');
+const ans1 = document.getElementById('ans1');
+const ans2 = document.getElementById('ans2');
+const wc1 = document.getElementById('wc1');
+const wc2 = document.getElementById('wc2');
+const submitBtn = document.getElementById('submitBtn');
+const submitHint = document.getElementById('submitHint');
+const timerDisplay = document.getElementById('timerDisplay');
+
+let timerInterval = null;
+let secondsLeft = 0;
+
+function beep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0,1,2].forEach(i=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.value = 0.15;
+      osc.connect(gain); gain.connect(ctx.destination);
+      const start = ctx.currentTime + i*0.35;
+      osc.start(start); osc.stop(start + 0.22);
+    });
+  }catch(e){ /* audio not available — silently ignore */ }
+}
+
+function formatTime(s){
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const sec = Math.floor(s%60).toString().padStart(2,'0');
+  return `${m}:${sec}`;
+}
+
+function startTimer(){
+  secondsLeft = cfg.durationMinutes * 60;
+  timerDisplay.textContent = formatTime(secondsLeft);
+  timerInterval = setInterval(() => {
+    secondsLeft -= 1;
+    timerDisplay.textContent = formatTime(Math.max(secondsLeft,0));
+    timerDisplay.classList.toggle('warn', secondsLeft <= 300 && secondsLeft > 60);
+    timerDisplay.classList.toggle('crit', secondsLeft <= 60);
+    if(secondsLeft <= 0){
+      clearInterval(timerInterval);
+      beep();
+      finishQuiz(true);
+    }
+  }, 1000);
+}
+
+startBtn.addEventListener('click', () => {
+  state.name = fName.value.trim();
+  state.reg = fReg.value.trim();
+  state.serial = fSerial.value.trim();
+  state.startedAt = new Date();
+  quizWho.textContent = `${state.name} · ${state.reg}`;
+  q1Text.textContent = cfg.question1;
+  q2Text.textContent = cfg.question2;
+  showView('quizView');
+  startTimer();
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+function wordCount(text){ return (text.trim().match(/\S+/g) || []).length; }
+function refreshQuiz(){
+  const c1 = wordCount(ans1.value);
+  const c2 = wordCount(ans2.value);
+  wc1.textContent = `${c1} word${c1===1?'':'s'}`;
+  wc2.textContent = `${c2} word${c2===1?'':'s'}`;
+  const ready = c1 > 0 && c2 > 0;
+  submitBtn.disabled = !ready;
+  submitHint.textContent = ready ? 'Ready to submit.' : 'Answer both questions to enable submission.';
+}
+ans1.addEventListener('input', refreshQuiz);
+ans2.addEventListener('input', refreshQuiz);
+
+function buildPdf(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'a4' });
+  const marginX = 56;
+  let y = 64;
+
+  doc.setFont('times','bold'); doc.setFontSize(16);
+  doc.text(`${cfg.courseTitle} (${cfg.courseCode}) — Theory Paper`, marginX, y);
+  y += 22;
+  doc.setDrawColor(180,150,60); doc.line(marginX, y, 539, y);
+  y += 26;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+  const submittedAt = new Date();
+  const lines = [
+    `Name: ${state.name}`,
+    `Registration number: ${state.reg}`,
+    `Serial number: ${state.serial}`,
+    `Quiz date: ${fmtDate(cfg.quizDate)}`,
+    `Lecturer: ${cfg.lecturer}`,
+    `Started: ${state.startedAt.toLocaleString()}`,
+    `Submitted: ${submittedAt.toLocaleString()}`,
+    state.location
+      ? `Location at start: ${state.location.address ? state.location.address + ' — ' : ''}lat ${state.location.lat.toFixed(5)}, lon ${state.location.lon.toFixed(5)} (accuracy ±${Math.round(state.location.accuracy)}m)`
+      : 'Location at start: not captured'
+  ];
+  lines.forEach(line => { doc.text(line, marginX, y); y += 16; });
+  y += 14; doc.line(marginX, y, 539, y); y += 26;
+
+  function addQuestion(qNumber, qTextVal, answer){
+    doc.setFont('times','bold'); doc.setFontSize(12);
+    const qLines = doc.splitTextToSize(`Question ${qNumber}: ${qTextVal}`, 483);
+    qLines.forEach(l => { if(y > 760){ doc.addPage(); y = 64; } doc.text(l, marginX, y); y += 16; });
+    y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    const answerText = answer.trim() ? answer.trim() : '(no answer provided)';
+    const aLines = doc.splitTextToSize(answerText, 483);
+    aLines.forEach(l => { if(y > 780){ doc.addPage(); y = 64; } doc.text(l, marginX, y); y += 15; });
+    y += 24;
+  }
+  addQuestion(1, cfg.question1, ans1.value);
+  addQuestion(2, cfg.question2, ans2.value);
+  return doc;
+}
+
+function downloadPdf(){
+  const doc = buildPdf();
+  const safeName = (state.name || 'candidate').replace(/[^a-z0-9]+/gi,'_');
+  doc.save(`${cfg.courseCode}_${safeName}_${state.serial || 'sn'}.pdf`);
+}
+
+async function finishQuiz(timedOut){
+  if(state.submitted) return;
+  state.submitted = true;
+  if(timerInterval) clearInterval(timerInterval);
+  [ans1, ans2].forEach(t => t.disabled = true);
+  submitBtn.disabled = true;
+
+  downloadPdf();
+
+  let cloudOk = true;
+  try{
+    await SUBMISSIONS.add({
+      courseCode: cfg.courseCode,
+      name: state.name,
+      reg: state.reg,
+      serial: state.serial,
+      location: state.location,
+      startedAt: state.startedAt.toISOString(),
+      submittedAt: new Date().toISOString(),
+      timedOut: !!timedOut,
+      answers: { q1: ans1.value, q2: ans2.value }
+    });
+  }catch(e){ cloudOk = false; }
+
+  document.getElementById('doneHeading').textContent = timedOut ? "Time's up — answers submitted" : 'Answers submitted';
+  document.getElementById('cloudWarn').classList.toggle('hidden', cloudOk);
+  showView('doneView');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+submitBtn.addEventListener('click', () => finishQuiz(false));
+document.getElementById('downloadAgainBtn').addEventListener('click', downloadPdf);
+
+/* ============================================================
+   ADMIN FLOW
+   ============================================================ */
+const admEmail = document.getElementById('admEmail');
+const admPass = document.getElementById('admPass');
+const admLoginBtn = document.getElementById('admLoginBtn');
+const admLoginErr = document.getElementById('admLoginErr');
+
+admLoginBtn.addEventListener('click', async () => {
+  admLoginErr.classList.add('hidden');
+  try{
+    await auth.signInWithEmailAndPassword(admEmail.value.trim(), admPass.value);
+  }catch(e){
+    admLoginErr.textContent = 'Sign-in failed — check the email and password.';
+    admLoginErr.classList.remove('hidden');
+  }
+});
+
+document.getElementById('admLogoutBtn').addEventListener('click', () => auth.signOut());
+
+auth.onAuthStateChanged(user => {
+  if(isAdminRoute()){
+    if(user){ showAdminDash(); } else { showView('adminLoginView'); }
+  }
+});
+
+function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function showAdminDash(){
+  showView('adminDashView');
+  document.getElementById('cfgCode').value = cfg.courseCode;
+  document.getElementById('cfgTitle').value = cfg.courseTitle;
+  document.getElementById('cfgDate').value = cfg.quizDate;
+  document.getElementById('cfgLecturer').value = cfg.lecturer;
+  document.getElementById('cfgDuration').value = cfg.durationMinutes;
+  document.getElementById('cfgQ1').value = cfg.question1;
+  document.getElementById('cfgQ2').value = cfg.question2;
+  await loadSubmissions();
+}
+
+document.getElementById('cfgSaveBtn').addEventListener('click', async () => {
+  const newCfg = {
+    courseCode: document.getElementById('cfgCode').value.trim(),
+    courseTitle: document.getElementById('cfgTitle').value.trim(),
+    quizDate: document.getElementById('cfgDate').value,
+    lecturer: document.getElementById('cfgLecturer').value.trim(),
+    durationMinutes: parseInt(document.getElementById('cfgDuration').value,10) || 35,
+    question1: document.getElementById('cfgQ1').value,
+    question2: document.getElementById('cfgQ2').value
+  };
+  try{
+    await CONFIG_DOC.set(newCfg, { merge:true });
+    cfg = newCfg;
+    applyConfigToStudentView();
+    const msg = document.getElementById('cfgSaveMsg');
+    msg.classList.remove('hidden');
+    setTimeout(()=>msg.classList.add('hidden'), 2500);
+  }catch(e){
+    alert('Could not save settings — check your connection and Firestore rules.');
+  }
+});
+
+let lastSubmissions = [];
+
+async function loadSubmissions(){
+  const tbody = document.getElementById('subsBody');
+  const empty = document.getElementById('subsEmpty');
+  tbody.innerHTML = '';
+  try{
+    const snap = await SUBMISSIONS.orderBy('submittedAt','desc').get();
+    lastSubmissions = [];
+    snap.forEach(doc => lastSubmissions.push({ id: doc.id, ...doc.data() }));
+    if(lastSubmissions.length === 0){ empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    lastSubmissions.forEach((sub, idx) => {
+      const loc = sub.location
+        ? `<a href="https://maps.google.com/?q=${sub.location.lat},${sub.location.lon}" target="_blank" rel="noopener">${esc(sub.location.address) || `${sub.location.lat.toFixed(4)}, ${sub.location.lon.toFixed(4)}`}</a>`
+        : '—';
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${esc(sub.name)}</td>
+        <td>${esc(sub.reg)}</td>
+        <td>${esc(sub.serial)}</td>
+        <td>${new Date(sub.submittedAt).toLocaleString()}</td>
+        <td>${loc}</td>
+        <td><button class="btn-view" data-idx="${idx}">View answers</button></td>
+      `;
+      tbody.appendChild(row);
+      const detail = document.createElement('tr');
+      detail.innerHTML = `<td colspan="6"><div class="ans-detail" id="detail-${idx}">
+        <b>Q1:</b> ${esc(sub.answers && sub.answers.q1)}<br><br>
+        <b>Q2:</b> ${esc(sub.answers && sub.answers.q2)}
+      </div></td>`;
+      tbody.appendChild(detail);
+    });
+    tbody.querySelectorAll('.btn-view').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(`detail-${btn.dataset.idx}`).classList.toggle('open');
+      });
+    });
+  }catch(e){
+    empty.textContent = 'Could not load submissions — check your connection and sign-in.';
+    empty.classList.remove('hidden');
+  }
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+  if(!lastSubmissions.length){ alert('No submissions to export yet.'); return; }
+  const rows = [['Name','Registration No','Serial No','Submitted At','Location Name','Latitude','Longitude','Accuracy(m)','Timed Out','Answer 1','Answer 2']];
+  lastSubmissions.forEach(s => {
+    rows.push([
+      s.name, s.reg, s.serial, s.submittedAt,
+      s.location ? (s.location.address || '') : '',
+      s.location ? s.location.lat : '', s.location ? s.location.lon : '', s.location ? Math.round(s.location.accuracy) : '',
+      s.timedOut ? 'Yes' : 'No',
+      (s.answers && s.answers.q1 || '').replace(/\n/g,' '),
+      (s.answers && s.answers.q2 || '').replace(/\n/g,' ')
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${(v+'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${cfg.courseCode}_submissions.csv`;
+  a.click();
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+(async function boot(){
+  await loadConfig();
+  routeApp();
+})();
+</script>
+</body>
+</html>
